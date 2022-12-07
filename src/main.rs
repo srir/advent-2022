@@ -1,5 +1,5 @@
-extern crate aoc_runner_derive;
 extern crate advent_2022;
+extern crate aoc_runner_derive;
 
 use aoc_runner_derive::aoc_main;
 
