@@ -7,14 +7,6 @@ struct Crate {
     label: String,
 }
 
-impl Crate {
-    fn new(label: &str) -> Self {
-        Crate {
-            label: label.to_string(),
-        }
-    }
-}
-
 #[derive(Debug, Copy, Clone)]
 struct MoveCommand {
     num_crates: u32,
