@@ -1,132 +1,93 @@
-use aoc_runner_derive::aoc;
-use std::borrow::BorrowMut;
+use aoc_runner_derive::{aoc, aoc_generator};
 use std::collections::BTreeMap;
-
-#[derive(Debug, Clone)]
-enum Node {
-    File {
-        name: String,
-        path: String,
-        size: usize,
-    },
-    Directory {
-        name: String,
-        path: String,
-        contents: BTreeMap<String, Node>,
-    },
-}
-use Node::*;
+use std::path::PathBuf;
 
 #[derive(Debug)]
-struct Tree {
-    root: Node,
+struct FileTree(BTreeMap<PathBuf, usize>);
+
+impl FileTree {
+    fn total_size_below_limit(&self, limit_size: usize) -> usize {
+        let FileTree(directories) = self;
+
+        directories
+            .iter()
+            .filter_map(|(path, &size)| {
+                if path.extension().is_some() || size > limit_size {
+                    None
+                } else {
+                    Some(size)
+                }
+            })
+            .sum()
+    }
+
+    fn smallest_size_above_limit(&self, total_needed_space: usize) -> Option<usize> {
+        let FileTree(directories) = self;
+
+        let used_space = *directories.get(&*PathBuf::from("/")).unwrap();
+        let free_space = 70000000 - used_space;
+        let additional_needed_space = total_needed_space - free_space;
+
+        directories
+            .iter()
+            .filter_map(|(path, &size)| {
+                if path.extension().is_some() || size < additional_needed_space {
+                    None
+                } else {
+                    Some(size)
+                }
+            })
+            .min()
+    }
 }
 
-#[derive(Debug, PartialEq, Eq)]
-enum ParseMode {
-    Command,
-    Output,
-}
-use ParseMode::*;
-
-fn parse_input(input: &str) -> Tree {
-    let mut mode = Command;
-    let mut nodes = Vec::<Node>::new();
-    let mut parents = BTreeMap::<String, &Node>::new();
-
-    let root = Directory {
-        name: "/".to_string(),
-        path: "/".to_string(),
-        contents: BTreeMap::new(),
-    };
-    nodes.push(root);
-
-    let mut tree = Tree { root };
-    let mut current_node = &tree.root;
+#[aoc_generator(day7)]
+fn parse_input(input: &str) -> FileTree {
+    let mut directories = BTreeMap::new();
+    let mut current_dir = PathBuf::from("/");
+    directories.insert(current_dir.clone(), 0);
 
     for line in input.lines().skip(1) {
-        println!("xcxc line {}", line);
-        println!("xcxc current_node {:?}", current_node);
-
         if line.starts_with("$ ls") {
-            mode = Output;
+            continue;
         } else if line.starts_with("$ cd /") {
-            mode = Command;
-            current_node = &tree.root;
+            current_dir = PathBuf::from("/");
         } else if line.starts_with("$ cd ..") {
-            mode = Command;
-
-            println!("xcxc current_node {:?}", current_node);
-
-            current_node = match current_node {
-                File { path, .. } => parents.get(path).unwrap(),
-                Directory { path, .. } => parents.get(path).unwrap(),
+            if let Some(parent) = current_dir.parent() {
+                current_dir = parent.to_path_buf();
             }
         } else if let Some(dir_name) = line.strip_prefix("$ cd ") {
-            mode = Command;
-            if let Directory { mut contents, .. } = current_node.borrow_mut() {
-                if let Directory {
-                    path: curr_path, ..
-                } = current_node.clone()
-                {
-                    let dir_name = dir_name.to_string();
-                    let new_path = curr_path + "/" + dir_name.as_str();
-                    let new_node = Directory {
-                        name: dir_name.clone(),
-                        path: new_path.clone(),
-                        contents: BTreeMap::new(),
-                    };
-                    contents.insert(dir_name.clone(), new_node);
-
-                    parents.insert(new_path, &new_node);
-                } else {
-                    panic!("unexpected");
-                }
-            } else {
-                panic!("Unexpected cd while current node was a file");
-            }
-        } else if let Directory { mut contents, .. } = current_node.borrow_mut() {
-            assert_eq!(mode, Output);
-            if let Directory {
-                path: curr_path, ..
-            } = current_node.clone()
-            {
-                let curr_path = curr_path.to_string();
-                let (type_or_size, name) = line.split_once(' ').unwrap();
-
-                if type_or_size == "dir" {
-                    contents.insert(
-                        name.to_string(),
-                        Directory {
-                            name: name.to_string(),
-                            path: curr_path + "/" + name,
-                            contents: BTreeMap::new(),
-                        },
-                    );
-                } else {
-                    let size = type_or_size.parse::<usize>().unwrap();
-
-                    contents.insert(
-                        name.to_string(),
-                        File {
-                            name: name.to_string(),
-                            path: curr_path + "/" + name,
-                            size,
-                        },
-                    );
-                }
-            }
+            let dir_name = dir_name.to_string();
+            let new_path = current_dir.join(dir_name);
+            directories.insert(new_path.clone(), 0);
+            current_dir = new_path;
         } else {
-            panic!("Unexpected output mode when not in a directory")
+            let (type_or_size, name) = line.split_once(' ').unwrap();
+            let new_path = current_dir.join(name);
+
+            if type_or_size == "dir" {
+                directories.insert(new_path, 0);
+            } else {
+                let size = type_or_size.parse::<usize>().unwrap();
+
+                for ancestor in new_path.ancestors() {
+                    if ancestor != new_path {
+                        *directories.entry(ancestor.to_path_buf()).or_insert(0) += size;
+                    }
+                }
+            }
         }
     }
 
-    tree
+    FileTree(directories)
 }
 
 #[aoc(day7, part1)]
-fn part1(input: &str) -> usize {
-    let tree = parse_input(input);
+fn part1(input: &FileTree) -> usize {
+    input.total_size_below_limit(100000)
+}
 
-    0
+#[aoc(day7, part2)]
+fn part2(input: &FileTree) -> usize {
+    input.smallest_size_above_limit(30000000).unwrap()
 }
